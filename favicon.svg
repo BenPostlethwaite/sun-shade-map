@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Sun Shade Map">
+  <defs>
+    <linearGradient id="sun" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffdf91" />
+      <stop offset="100%" stop-color="#f5aa3b" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#09111f" />
+  <circle cx="64" cy="64" r="25" fill="url(#sun)" />
+  <path d="M64 16v18M64 94v18M16 64h18M94 64h18M31 31l13 13M84 84l13 13M31 97l13-13M84 44l13-13" stroke="#edf2ff" stroke-width="6" stroke-linecap="round" opacity="0.82" />
+</svg>

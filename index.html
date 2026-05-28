@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sun Shade Map</title>
+    <meta
+      name="description"
+      content="Local sun position and wall exposure planner with sky map and sunlit timing windows."
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop backdrop-a"></div>
+    <div class="backdrop backdrop-b"></div>
+
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Local sun study tool</p>
+          <h1>Sun Shade Map</h1>
+          <p class="lede">
+            Built for rock climbers: see where the sun is in the sky and when a wall moves into or out of direct sun.
+          </p>
+        </div>
+        <section class="summary-card" aria-live="polite">
+          <div>
+            <span class="summary-label">Current status</span>
+            <strong id="summaryStatus">Loading...</strong>
+          </div>
+          <div>
+            <span class="summary-label">Location</span>
+            <strong id="summaryLocation">—</strong>
+          </div>
+          <div>
+            <span class="summary-label">Date</span>
+            <strong id="summaryDate">—</strong>
+          </div>
+        </section>
+      </header>
+
+      <section class="grid-layout">
+        <aside class="panel controls-panel">
+          <div class="panel-header">
+            <h2>Controls</h2>
+            <p>Adjust the sky, wall, and location inputs for climbing projects.</p>
+          </div>
+
+          <div class="field-group">
+            <label for="dateInput">Date</label>
+            <input id="dateInput" type="date" />
+          </div>
+
+          <div class="field-group">
+            <label for="timeInput">Time</label>
+            <input id="timeInput" type="time" step="60" />
+            <input id="timeSlider" type="range" min="0" max="1439" />
+          </div>
+
+          <div class="field-row">
+            <div class="field-group grow">
+              <label for="latInput">Latitude</label>
+              <input id="latInput" type="number" min="-90" max="90" step="0.0001" />
+            </div>
+            <div class="field-group grow">
+              <label for="lonInput">Longitude</label>
+              <input id="lonInput" type="number" min="-180" max="180" step="0.0001" />
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button id="geoButton" type="button">Use my location</button>
+            <button id="resetButton" type="button" class="secondary">reset location</button>
+            <button id="nowButton" type="button" class="secondary">Now</button>
+          </div>
+
+          <div class="field-group">
+            <label for="wallAspectInput">Wall aspect</label>
+            <div class="input-with-hint">
+              <input id="wallAspectInput" type="number" min="0" max="360" step="1" />
+              <span>degrees clockwise from north</span>
+              <input id="wallAspectSlider" type="range" min="0" max="360" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Wall angle mode</label>
+            <div class="segmented-control" role="tablist" aria-label="Wall angle mode">
+              <button id="angleModeButton" type="button" class="segment active">Angle from vertical</button>
+              <button id="dimensionModeButton" type="button" class="segment">Height + overhang</button>
+            </div>
+          </div>
+
+          <div id="angleModePanel" class="mode-panel">
+            <div class="field-group">
+              <label for="wallAngleInput">Wall angle</label>
+              <div class="input-with-hint">
+                <input id="wallAngleInput" type="number" min="-90" max="90" step="0.1" />
+                <span>0° vertical, + overhang, - slabby</span>
+                  <input id="wallAngleSlider" type="range" min="-90" max="90" step="0.1" />
+              </div>
+            </div>
+          </div>
+
+          <div id="dimensionModePanel" class="mode-panel hidden">
+            <div class="field-row">
+              <div class="field-group grow">
+                <label for="wallHeightInput">Height</label>
+                <input id="wallHeightInput" type="number" min="0" step="0.01" />
+              </div>
+              <div class="field-group grow">
+                <label for="wallOverhangInput">Overhang</label>
+                <input id="wallOverhangInput" type="number" min="0" step="0.01" />
+              </div>
+            </div>
+            <p class="help-text">Converts height and overhang into an angle.</p>
+          </div>
+
+          <div class="stats-grid">
+            <div>
+              <span>Sun azimuth</span>
+              <strong id="sunAzimuthStat">—</strong>
+            </div>
+            <div>
+              <span>Sun altitude</span>
+              <strong id="sunAltitudeStat">—</strong>
+            </div>
+            <div>
+              <span>Wall status</span>
+              <strong id="wallStatusStat">—</strong>
+            </div>
+              <div>
+                <span>Total sunlit time</span>
+                <strong id="totalSunlitStat">—</strong>
+              </div>
+          </div>
+        </aside>
+
+        <section class="panel visualization-panel">
+          <div class="panel-header">
+            <h2>Sky view</h2>
+          </div>
+          <canvas id="skyCanvas" width="960" height="960" aria-label="Sky map visualization"></canvas>
+          <div class="legend">
+            <span><i class="legend-dot sun"></i>Sun</span>
+            <span><i class="legend-dot path"></i>Daily path</span>
+            <span><i class="legend-dot wall"></i>Wall facing direction</span>
+          </div>
+        </section>
+
+        <section class="panel results-panel">
+          <div class="panel-header">
+            <h2>Exposure windows</h2>
+            <p>Times when the selected wall is directly lit.</p>
+          </div>
+          <div id="windowsList" class="window-list"></div>
+          <div class="insight-card sun-times-card">
+            <div>
+              <span>Sunrise</span>
+              <strong id="sunriseStat">—</strong>
+            </div>
+            <div>
+              <span>Sunset</span>
+              <strong id="sunsetStat">—</strong>
+            </div>
+          </div>
+          <div class="insight-card">
+            <span>Next change</span>
+            <strong id="nextChangeStat">—</strong>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
