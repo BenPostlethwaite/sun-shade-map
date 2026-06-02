@@ -21,20 +21,42 @@ export async function getNearestTideStation(latitude, longitude) {
     const response = await fetch(
       `${STATIONS_API}?lat=${latitude}&lon=${longitude}&radius=70&type=tideStations&format=json`
     );
-    const data = await response.json();
 
-    if (!data.stations || data.stations.length === 0) {
+    if (!response.ok) {
+      throw new Error(`Station lookup failed with ${response.status}`);
+    }
+
+    const data = await response.json();
+    const stations = Array.isArray(data?.stations) ? data.stations : [];
+
+    if (stations.length === 0) {
       console.warn('No tide stations found nearby');
       return null;
     }
 
-    // Return the closest station
-    const station = data.stations[0];
+    const station = stations
+      .map((entry) => ({
+        id: entry.id ?? entry.stationId ?? entry.station_id,
+        name: entry.name ?? entry.stationName ?? 'Unknown station',
+        latitude: Number(entry.lat ?? entry.latitude),
+        longitude: Number(entry.lon ?? entry.longitude),
+      }))
+      .filter((entry) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude) && entry.id)
+      .map((entry) => ({
+        ...entry,
+        distance: Math.hypot(entry.latitude - latitude, entry.longitude - longitude),
+      }))
+      .sort((left, right) => left.distance - right.distance)[0];
+
+    if (!station) {
+      return null;
+    }
+
     const result = {
       id: station.id,
       name: station.name,
-      latitude: parseFloat(station.lat),
-      longitude: parseFloat(station.lon),
+      latitude: station.latitude,
+      longitude: station.longitude,
     };
 
     tideCache.stations.set(cacheKey, result);
@@ -61,6 +83,11 @@ export async function getTidePredictions(stationId, date) {
     const response = await fetch(
       `${NOAA_API_BASE}?station=${stationId}&begin_date=${dateStr.replace(/-/g, '')}&end_date=${dateStr.replace(/-/g, '')}&product=predictions&datum=MLLW&units=metric&time_zone=gmt&format=json`
     );
+
+    if (!response.ok) {
+      throw new Error(`Prediction lookup failed with ${response.status}`);
+    }
+
     const data = await response.json();
 
     if (!data.predictions || data.predictions.length === 0) {
@@ -69,7 +96,7 @@ export async function getTidePredictions(stationId, date) {
     }
 
     const predictions = data.predictions.map(p => ({
-      time: new Date(p.t + 'Z'), // NOAA returns GMT, add Z to parse correctly
+      time: new Date(`${String(p.t).replace(' ', 'T')}Z`),
       height: parseFloat(p.v),
     }));
 
@@ -212,4 +239,20 @@ export function getTideStats(predictions) {
     maxHeight,
     range: maxHeight - minHeight,
   };
+}
+
+export const getTideStations = getNearestTideStation;
+export const getTideData = getTidePredictions;
+export const calculateTideHeight = calculateCurrentTideHeight;
+export const formatTideTime = formatClockTime;
+
+export function getTideStatus(percentage, trend = 'unknown') {
+  if (!Number.isFinite(percentage)) {
+    return 'Tide data unavailable';
+  }
+
+  const band = percentage < 33 ? 'Low tide' : percentage > 66 ? 'High tide' : 'Mid tide';
+  const direction = trend === 'rising' ? 'rising' : trend === 'falling' ? 'falling' : 'steady';
+
+  return `${band} · ${direction}`;
 }
