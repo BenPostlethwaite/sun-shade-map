@@ -169,6 +169,29 @@
             <span>Next change</span>
             <strong id="nextChangeStat">—</strong>
           </div>
+          <div class="insight-card tide-card">
+            <div>
+              <span>High tide</span>
+              <strong id="highTideStat">—</strong>
+            </div>
+            <div>
+              <span>Low tide</span>
+              <strong id="lowTideStat">—</strong>
+            </div>
+            <div>
+              <span>Current tide</span>
+              <strong id="currentTideStat">—</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel tide-graph-panel">
+          <div class="panel-header">
+            <h2>Tide height</h2>
+            <p>Daily tidal variation at the nearest tide station.</p>
+          </div>
+          <canvas id="tideCanvas" width="960" height="200" aria-label="Tide height chart"></canvas>
+          <div id="tideStatus" class="tide-status-text">Loading tide data...</div>
         </section>
       </section>
     </main>
