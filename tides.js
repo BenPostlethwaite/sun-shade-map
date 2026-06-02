@@ -1,11 +1,28 @@
 const NOAA_API_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
-const STATIONS_API = 'https://api.tidesandcurrents.noaa.gov/api/prod/stations';
+const STATIONS_API = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions';
 
 // Cache for tide stations and predictions to reduce API calls
 const tideCache = {
   stations: new Map(),
   predictions: new Map(),
+  allStations: null,
 };
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function distanceKm(latA, lonA, latB, lonB) {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(latB - latA);
+  const dLon = toRadians(lonB - lonA);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 /**
  * Find the nearest NOAA tide station to a given location
@@ -18,9 +35,7 @@ export async function getNearestTideStation(latitude, longitude) {
   }
 
   try {
-    const response = await fetch(
-      `${STATIONS_API}?lat=${latitude}&lon=${longitude}&radius=70&type=tideStations&format=json`
-    );
+    const response = await fetch(STATIONS_API);
 
     if (!response.ok) {
       throw new Error(`Station lookup failed with ${response.status}`);
@@ -34,19 +49,23 @@ export async function getNearestTideStation(latitude, longitude) {
       return null;
     }
 
-    const station = stations
-      .map((entry) => ({
-        id: entry.id ?? entry.stationId ?? entry.station_id,
-        name: entry.name ?? entry.stationName ?? 'Unknown station',
-        latitude: Number(entry.lat ?? entry.latitude),
-        longitude: Number(entry.lon ?? entry.longitude),
-      }))
-      .filter((entry) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude) && entry.id)
+    if (!Array.isArray(tideCache.allStations)) {
+      tideCache.allStations = stations
+        .map((entry) => ({
+          id: entry.id ?? entry.stationId ?? entry.station_id,
+          name: entry.name ?? entry.stationName ?? 'Unknown station',
+          latitude: Number(entry.lat ?? entry.latitude),
+          longitude: Number(entry.lng ?? entry.lon ?? entry.longitude),
+        }))
+        .filter((entry) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude) && entry.id);
+    }
+
+    const station = tideCache.allStations
       .map((entry) => ({
         ...entry,
-        distance: Math.hypot(entry.latitude - latitude, entry.longitude - longitude),
+        distanceKm: distanceKm(latitude, longitude, entry.latitude, entry.longitude),
       }))
-      .sort((left, right) => left.distance - right.distance)[0];
+      .sort((left, right) => left.distanceKm - right.distanceKm)[0];
 
     if (!station) {
       return null;
