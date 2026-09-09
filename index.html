@@ -75,6 +75,8 @@
             <button id="nowButton" type="button" class="secondary">Now</button>
           </div>
 
+          <p id="locationStatus" class="help-text" role="status">Allow location access, or enter coordinates manually.</p>
+
           <div class="field-group">
             <label for="wallAspectInput">Wall aspect</label>
             <div class="input-with-hint">
@@ -126,16 +128,16 @@
             </div>
 
             <div class="button-row">
-              <button id="tideStationButton" type="button">Get nearby tide station</button>
+              <button id="tideStationButton" type="button">Load local tide forecast</button>
             </div>
 
             <div class="tide-meta">
-              <span>Station</span>
+              <span>Forecast location</span>
               <strong id="tideStationStat">Current location</strong>
             </div>
 
             <div class="field-group">
-              <label for="tideOffsetInput">Offset</label>
+              <label for="tideOffsetInput">Height adjustment</label>
               <div class="input-with-hint">
                 <input id="tideOffsetInput" type="number" step="0.1" />
                 <span>Local adjustment in meters</span>
@@ -197,15 +199,15 @@
           </div>
           <div class="insight-card tide-card">
             <div>
-              <span>High tide</span>
+              <span>Estimated high tides</span>
               <strong id="highTideStat">—</strong>
             </div>
             <div>
-              <span>Low tide</span>
+              <span>Estimated low tides</span>
               <strong id="lowTideStat">—</strong>
             </div>
             <div>
-              <span>Current tide</span>
+              <span>Tide at selected time</span>
               <strong id="currentTideStat">—</strong>
             </div>
           </div>
@@ -214,10 +216,12 @@
         <section class="panel tide-graph-panel">
           <div class="panel-header">
             <h2>Tide height</h2>
-            <p>Daily tidal variation at the nearest tide station.</p>
+            <p>Estimated sea level including tides near your selected location. Times use your device’s time zone.</p>
           </div>
           <canvas id="tideCanvas" width="960" height="200" aria-label="Tide height chart"></canvas>
-          <div id="tideStatus" class="tide-status-text">Loading tide data...</div>
+          <div id="tideStatus" class="tide-status-text" role="status">Loading tide data...</div>
+          <p class="help-text">Hourly model estimates in metres relative to mean sea level, plus your height adjustment. Coastal accuracy is limited: do not use this forecast to determine safe tidal access or for navigation. Check <a href="https://easytide.admiralty.co.uk/" target="_blank" rel="noopener noreferrer">ADMIRALTY tide predictions</a> and local conditions.</p>
+          <p class="help-text">Marine data: <a href="https://open-meteo.com/">Open-Meteo</a>, <a href="https://data.marine.copernicus.eu/">Copernicus Marine / Météo-France</a> and <a href="https://www.dwd.de/">DWD</a>.</p>
         </section>
       </section>
     </main>

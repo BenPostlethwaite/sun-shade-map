@@ -1,111 +1,62 @@
-const NOAA_API_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
-const STATIONS_API = 'https://api.tidesandcurrents.noaa.gov/api/prod/stations';
+const MARINE_API = 'https://marine-api.open-meteo.com/v1/marine';
+const cache = new Map();
 
-// Cache for tide stations and predictions to reduce API calls
-const tideCache = {
-  stations: new Map(),
-  predictions: new Map(),
-};
-
-/**
- * Find the nearest NOAA tide station to a given location
- */
-export async function getNearestTideStation(latitude, longitude) {
-  const cacheKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
-  
-  if (tideCache.stations.has(cacheKey)) {
-    return tideCache.stations.get(cacheKey);
-  }
-
-  try {
-    const response = await fetch(
-      `${STATIONS_API}?lat=${latitude}&lon=${longitude}&radius=70&type=tideStations&format=json`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Station lookup failed with ${response.status}`);
-    }
-
-    const data = await response.json();
-    const stations = Array.isArray(data?.stations) ? data.stations : [];
-
-    if (stations.length === 0) {
-      console.warn('No tide stations found nearby');
-      return null;
-    }
-
-    const station = stations
-      .map((entry) => ({
-        id: entry.id ?? entry.stationId ?? entry.station_id,
-        name: entry.name ?? entry.stationName ?? 'Unknown station',
-        latitude: Number(entry.lat ?? entry.latitude),
-        longitude: Number(entry.lon ?? entry.longitude),
-      }))
-      .filter((entry) => Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude) && entry.id)
-      .map((entry) => ({
-        ...entry,
-        distance: Math.hypot(entry.latitude - latitude, entry.longitude - longitude),
-      }))
-      .sort((left, right) => left.distance - right.distance)[0];
-
-    if (!station) {
-      return null;
-    }
-
-    const result = {
-      id: station.id,
-      name: station.name,
-      latitude: station.latitude,
-      longitude: station.longitude,
-    };
-
-    tideCache.stations.set(cacheKey, result);
-    return result;
-  } catch (error) {
-    console.error('Error fetching tide stations:', error);
-    return null;
-  }
+export function localDateString(date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
-/**
- * Fetch tide predictions for a given station and date
- */
-export async function getTidePredictions(stationId, date) {
-  const dateStr = date.toISOString().split('T')[0];
-  const cacheKey = `${stationId}-${dateStr}`;
-
-  if (tideCache.predictions.has(cacheKey)) {
-    return tideCache.predictions.get(cacheKey);
+// The provider returns a nearby ocean model cell, not a tide gauge station.
+export async function getNearestTideStation(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw new Error('Enter valid latitude and longitude coordinates.');
   }
+  return { id: latitude + ',' + longitude, latitude, longitude,
+    name: 'Near ' + latitude.toFixed(3) + ', ' + longitude.toFixed(3) };
+}
 
-  try {
-    // Get predictions for the day (hourly)
-    const response = await fetch(
-      `${NOAA_API_BASE}?station=${stationId}&begin_date=${dateStr.replace(/-/g, '')}&end_date=${dateStr.replace(/-/g, '')}&product=predictions&datum=MLLW&units=metric&time_zone=gmt&format=json`
-    );
+export async function getTidePredictions(locationId, date) {
+  if (!Number.isFinite(date.getTime())) throw new Error('Choose a valid date.');
+  const key = locationId + ':' + localDateString(date);
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.created < 30 * 60 * 1000) return cached.promise;
+  const promise = fetchPredictions(locationId, date);
+  cache.set(key, { created: Date.now(), promise });
+  try { return await promise; }
+  catch (error) { cache.delete(key); throw error; }
+}
 
-    if (!response.ok) {
-      throw new Error(`Prediction lookup failed with ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.predictions || data.predictions.length === 0) {
-      console.warn(`No tide predictions for station ${stationId}`);
-      return null;
-    }
-
-    const predictions = data.predictions.map(p => ({
-      time: new Date(`${String(p.t).replace(' ', 'T')}Z`),
-      height: parseFloat(p.v),
-    }));
-
-    tideCache.predictions.set(cacheKey, predictions);
-    return predictions;
-  } catch (error) {
-    console.error('Error fetching tide predictions:', error);
-    return null;
+async function fetchPredictions(locationId, date) {
+  const [latitude, longitude] = locationId.split(',').map(Number);
+  await getNearestTideStation(latitude, longitude);
+  // Include both midnight boundaries and neighbours for detecting extrema.
+  const start = new Date(date); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  const from = new Date(start.getTime() - 3600000);
+  const until = new Date(end.getTime() + 12 * 3600000);
+  const params = new URLSearchParams({ latitude, longitude,
+    hourly: 'sea_level_height_msl', timezone: 'GMT', timeformat: 'unixtime',
+    cell_selection: 'sea', start_date: from.toISOString().slice(0, 10),
+    end_date: until.toISOString().slice(0, 10) });
+  let response;
+  try { response = await fetch(MARINE_API + '?' + params, { signal: AbortSignal.timeout(15000) }); }
+  catch { throw new Error('Unable to reach the tide forecast service. Check your connection and retry.'); }
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(response.status === 429 ? 'Tide service is busy. Please try again shortly.' :
+      'Tide forecast unavailable for this date. Try today or a date in the next few days.');
   }
+  const times = data.hourly?.time;
+  const heights = data.hourly?.sea_level_height_msl;
+  if (!Array.isArray(times) || !Array.isArray(heights)) throw new Error('No sea-level forecast returned for this location.');
+  const predictions = times.map((time, i) => ({ time: new Date(time * 1000), height: heights[i] }))
+    .filter(p => Number.isFinite(p.time.getTime()) && Number.isFinite(p.height));
+  // Never draw a fabricated flat curve for an inland location or missing day.
+  const day = predictions.filter(p => p.time >= start && p.time <= end);
+  if (day.length < 2 || day[0].time > start || day.at(-1).time < end ||
+      day.some((p, i) => i > 0 && p.time - day[i - 1].time > 3600000)) {
+    throw new Error('No complete coastal forecast for this location and date. Choose a coastal location or another day.');
+  }
+  return predictions;
 }
 
 /**
@@ -125,7 +76,7 @@ export function findHighLowTides(predictions) {
     const next = predictions[i + 1].height;
 
     // High tide: current is greater than both neighbors
-    if (current > prev && current > next) {
+    if (current > prev && current >= next && predictions.slice(i + 1).find(p => p.height !== current)?.height < current) {
       highTides.push({
         time: predictions[i].time,
         height: current,
@@ -133,7 +84,7 @@ export function findHighLowTides(predictions) {
     }
 
     // Low tide: current is less than both neighbors
-    if (current < prev && current < next) {
+    if (current < prev && current <= next && predictions.slice(i + 1).find(p => p.height !== current)?.height > current) {
       lowTides.push({
         time: predictions[i].time,
         height: current,
@@ -165,12 +116,8 @@ export function calculateCurrentTideHeight(dateTime, predictions) {
   }
 
   if (!lower || !upper) {
-    // Use the closest prediction if we're outside the range
-    const closest = predictions.reduce((prev, curr) =>
-      Math.abs(curr.time - dateTime) < Math.abs(prev.time - dateTime) ? curr : prev
-    );
     return {
-      height: closest.height,
+      height: null,
       status: 'unknown',
       percentage: 0,
     };
@@ -181,7 +128,7 @@ export function calculateCurrentTideHeight(dateTime, predictions) {
   const height = lower.height + (upper.height - lower.height) * timeFraction;
 
   // Determine if tide is rising or falling
-  const status = upper.height > lower.height ? 'rising' : 'falling';
+  const status = upper.height === lower.height ? 'steady' : upper.height > lower.height ? 'rising' : 'falling';
 
   // Calculate percentage relative to today's min and max
   const heights = predictions.map(p => p.height);
