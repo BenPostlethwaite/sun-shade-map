@@ -6,7 +6,7 @@ import { getTidePredictions, getNearestTideStation, calculateCurrentTideHeight, 
 test('Pages artifact includes every local module imported by app.js', () => {
   const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
   const workflow = readFileSync(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
-  for (const [, file] of app.matchAll(/from '\.\/(.+?)'/g)) assert.ok(workflow.includes(file), file);
+  for (const [, file] of app.matchAll(/from '\.\/(.+?)'/g)) assert.ok(workflow.includes(file.split('?')[0]), file);
 });
 
 test('forecast uses coordinates, UTC timestamps, and coalesces requests', async () => {

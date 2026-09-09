@@ -22,7 +22,7 @@ import {
   getTideStats,
   getTideStatus,
   localDateString,
-} from './tides.js';
+} from './tides.js?v=20260909-marine';
 
 const STORAGE_KEY = 'sun-shade-map-state';
 const DEFAULT_STATE = {
