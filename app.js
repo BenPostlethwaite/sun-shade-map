@@ -21,11 +21,12 @@ import {
   getTideStations,
   getTideStats,
   getTideStatus,
+  localDateString,
 } from './tides.js';
 
 const STORAGE_KEY = 'sun-shade-map-state';
 const DEFAULT_STATE = {
-  date: new Date().toISOString().slice(0, 10),
+  date: localDateString(new Date()),
   time: new Date().toTimeString().slice(0, 5),
   latitude: 51.5074,
   longitude: -0.1278,
@@ -99,6 +100,7 @@ let tideState = {
   updatedAt: null,
 };
 let tideRequestToken = 0;
+let tideRequestKey = '';
 
 // tooltip element for canvas hover
 const canvasTooltip = document.createElement('div');
@@ -158,7 +160,8 @@ function buildTideSamples(predictions, startOfDay) {
   const samples = [];
 
   for (let minute = 0; minute <= 1440; minute += 20) {
-    const time = new Date(startOfDay.getTime() + minute * 60000);
+    const time = new Date(startOfDay);
+    time.setMinutes(minute);
     const tide = calculateTideHeight(time, predictions);
     samples.push({
       minute,
@@ -173,8 +176,9 @@ function buildTideSamples(predictions, startOfDay) {
 function buildTideSnapshot(dateTime) {
   const predictions = state.tideEnabled ? getAdjustedTidePredictions() : [];
   const hasTideData = predictions.length > 0;
-  const startOfDay = new Date(state.date);
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = new Date(`${state.date}T00:00:00`);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
 
   if (!hasTideData) {
     return {
@@ -193,7 +197,7 @@ function buildTideSnapshot(dateTime) {
     };
   }
 
-  const stats = getTideStats(predictions);
+  const stats = getTideStats(predictions.filter(p => p.time >= startOfDay && p.time < endOfDay));
   const current = calculateTideHeight(dateTime, predictions);
   const { highTides, lowTides } = findHighLowTides(predictions);
 
@@ -202,8 +206,8 @@ function buildTideSnapshot(dateTime) {
     hasTideData: true,
     predictions,
     samples: buildTideSamples(predictions, startOfDay),
-    highTides,
-    lowTides,
+    highTides: highTides.filter(p => p.time >= startOfDay && p.time < endOfDay),
+    lowTides: lowTides.filter(p => p.time >= startOfDay && p.time < endOfDay),
     current,
     nextChange: getNextTideChange(dateTime, predictions),
     stats,
@@ -281,7 +285,7 @@ function renderWindows(windows) {
     elements.windowsList.innerHTML = '<div class="empty-state">No direct sun exposure on the selected wall for this date.</div>';
     return;
   }
-  const startOfDay = new Date(state.date);
+  const startOfDay = new Date(`${state.date}T00:00:00`);
   startOfDay.setHours(0, 0, 0, 0);
 
   // Build combined timebar with multiple lit segments
@@ -540,7 +544,7 @@ function renderSky(position, wallAspect, wallSteepness, windows = [], tideSnapsh
 
   // Draw lit segments on the path itself using exposure windows
   if (windows && windows.length) {
-    const startOfDay = new Date(state.date);
+    const startOfDay = new Date(`${state.date}T00:00:00`);
     startOfDay.setHours(0, 0, 0, 0);
 
     for (const window of windows) {
@@ -590,7 +594,7 @@ function renderSky(position, wallAspect, wallSteepness, windows = [], tideSnapsh
     context.textBaseline = 'middle';
     context.font = '400 12px "Aptos", "Segoe UI", sans-serif';
 
-    const startOfDay = new Date(state.date);
+    const startOfDay = new Date(`${state.date}T00:00:00`);
     startOfDay.setHours(0, 0, 0, 0);
     let lastLabelPos = null;
     for (const pt of pathPoints) {
@@ -691,7 +695,7 @@ function renderTideGraph(tideSnapshot, dateTime, sunTimes) {
     context.fillStyle = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.8)' : 'rgba(255,255,255,0.84)';
     context.font = '600 15px "Aptos", "Segoe UI", sans-serif';
     context.fillText('Loading tide data…', left, top + 28);
-    elements.tideStatus.textContent = 'Loading nearest tide station and predictions…';
+    elements.tideStatus.textContent = 'Loading local sea-level forecast…';
     return;
   }
 
@@ -873,7 +877,7 @@ function renderTideInfo(tideSnapshot) {
     elements.highTideStat.textContent = '—';
     elements.lowTideStat.textContent = '—';
     elements.currentTideStat.textContent = 'Loading…';
-    elements.tideStatus.textContent = 'Loading nearest tide station and predictions…';
+    elements.tideStatus.textContent = 'Loading local sea-level forecast…';
     return;
   }
 
@@ -890,10 +894,10 @@ function renderTideInfo(tideSnapshot) {
   const current = tideSnapshot.current;
 
   elements.highTideStat.textContent = highTide
-    ? `${formatTideTime(highTide.time)} (${formatTideHeight(highTide.height)})`
+    ? tideSnapshot.highTides.map(t => `${formatTideTime(t.time)} (${formatTideHeight(t.height)})`).join(' · ')
     : '—';
   elements.lowTideStat.textContent = lowTide
-    ? `${formatTideTime(lowTide.time)} (${formatTideHeight(lowTide.height)})`
+    ? tideSnapshot.lowTides.map(t => `${formatTideTime(t.time)} (${formatTideHeight(t.height)})`).join(' · ')
     : '—';
   elements.currentTideStat.textContent = current.height == null
     ? '—'
@@ -922,7 +926,10 @@ function renderCurrentView() {
   elements.nextChangeStat.textContent = getNextChangeText(lastRenderContext.windows, lastRenderContext.dateTime);
 }
 
-async function updateTideData() {
+async function updateTideData(force = false) {
+  const key = `${state.tideEnabled}:${state.latitude}:${state.longitude}:${state.date}`;
+  if (!force && key === tideRequestKey) return;
+  tideRequestKey = key;
   const requestToken = ++tideRequestToken;
 
   if (!state.tideEnabled) {
@@ -959,7 +966,7 @@ async function updateTideData() {
     if (!station) {
       tideState = {
         loading: false,
-        error: 'No nearby tide station could be found.',
+        error: 'No coastal forecast location could be found.',
         station: null,
         predictions: [],
         updatedAt: new Date(),
@@ -976,7 +983,7 @@ async function updateTideData() {
     if (!predictions || predictions.length === 0) {
       tideState = {
         loading: false,
-        error: `No tide predictions returned for station ${station.name}.`,
+        error: `No tide predictions returned for ${station.name}.`,
         station,
         predictions: [],
         updatedAt: new Date(),
@@ -1065,7 +1072,7 @@ elements.skyCanvas.addEventListener('mousemove', (evt) => {
     if (d < nearestDist) { nearestDist = d; nearest = pt; }
   }
   if (nearest && nearestDist < 18) {
-    canvasTooltip.textContent = `${formatClock(new Date(new Date(state.date).setHours(0,0,0,0) + nearest.minute*60000))}`;
+    canvasTooltip.textContent = `${formatClock(new Date(new Date(`${state.date}T00:00:00`).setHours(0,0,0,0) + nearest.minute*60000))}`;
     canvasTooltip.classList.remove('hidden');
     canvasTooltip.style.left = `${pos.clientX}px`;
     canvasTooltip.style.top = `${pos.clientY - 10}px`;
@@ -1184,18 +1191,22 @@ elements.dimensionModeButton.addEventListener('click', () => {
 
 elements.geoButton.addEventListener('click', async () => {
   if (!navigator.geolocation) {
-    alert('Geolocation is not available in this browser.');
+    document.getElementById('locationStatus').textContent = 'Location is unavailable. Enter coordinates to choose your location.';
     return;
   }
 
+  const previousLocation = `${state.latitude},${state.longitude}`;
+  document.getElementById('locationStatus').textContent = 'Finding your location…';
   navigator.geolocation.getCurrentPosition(
     (position) => {
+      if (`${state.latitude},${state.longitude}` !== previousLocation) return;
       state.latitude = Number(position.coords.latitude.toFixed(6));
       state.longitude = Number(position.coords.longitude.toFixed(6));
+      document.getElementById('locationStatus').textContent = 'Using your device location. You can also enter coordinates manually.';
       updateFromState();
     },
     (error) => {
-      alert(`Could not get your location: ${error.message}`);
+      document.getElementById('locationStatus').textContent = 'Location could not be obtained. Allow location access and retry, or enter coordinates manually.';
     },
     { enableHighAccuracy: true, timeout: 10000 },
   );
@@ -1203,6 +1214,7 @@ elements.geoButton.addEventListener('click', async () => {
 
 elements.resetButton.addEventListener('click', () => {
   state = { ...DEFAULT_STATE };
+  tideRequestKey = '';
   tideState = {
     loading: false,
     error: null,
@@ -1218,12 +1230,12 @@ if (elements.tideStationButton) elements.tideStationButton.addEventListener('cli
   if (elements.tideEnabledInput) {
     elements.tideEnabledInput.checked = true;
   }
-  void updateTideData();
+  void updateTideData(true);
 });
 
 if (elements.nowButton) elements.nowButton.addEventListener('click', () => {
   const now = new Date();
-  state.date = now.toISOString().slice(0,10);
+  state.date = localDateString(now);
   state.time = now.toTimeString().slice(0,5);
   updateFromState();
 });
@@ -1233,6 +1245,7 @@ window.addEventListener('resize', () => updateFromState());
 function initialize() {
   syncControlsFromState();
   updateFromState();
+  elements.geoButton.click();
 }
 
 initialize();
