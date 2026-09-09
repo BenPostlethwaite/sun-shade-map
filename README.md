@@ -43,4 +43,6 @@ Coastal accuracy is limited. Do not use these estimates for navigation or to det
 
 ## Verification
 
+When a land request returns no tide values but identifies a sea cell within 25 km, the app retries that cell once. The forecast label shows the returned sea coordinates and distance from the selected location. This is a nearby sea estimate, not an estuary or harbour tide prediction. More distant cells are rejected.
+
 With Node.js 22 or newer, run `node --test tests/tides.test.mjs`. The tests cover the deployment file list, request caching, invalid coordinates, missing data, flat extrema and out-of-range interpolation.

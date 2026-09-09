@@ -47,6 +47,38 @@ test('invalid coordinates fail before a request', async () => {
   await assert.rejects(getNearestTideStation(91, 0), /valid latitude/);
 });
 
+test('missing land data retries the returned nearby sea point and labels its distance', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async url => {
+    const params = new URL(url).searchParams;
+    calls++;
+    if (calls === 2) assert.equal(params.get('latitude'), '49.9');
+    const start = Date.parse(params.get('start_date') + 'T00:00:00Z');
+    return {ok: true, json: async () => ({latitude: 49.9, longitude: 0, hourly: {
+      time: Array.from({length: 96}, (_, i) => start / 1000 + i * 3600),
+      sea_level_height_msl: Array.from({length: 96}, (_, i) => calls === 1 ? null : Math.sin(i)),
+    }})};
+  };
+  try {
+    const result = await getTidePredictions('50,0', new Date(2026,8,9));
+    assert.equal(calls, 2);
+    assert.equal(result.forecastLocation.nearby, true);
+    assert.match(result.forecastLocation.name, /11.1 km away/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('distant sea cells are rejected without a fallback request', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return {ok: true, json: async () => ({latitude: 45, longitude: 0,
+    hourly: {time: [1,2], sea_level_height_msl: [null,null]}})}; };
+  try {
+    await assert.rejects(getTidePredictions('51,0', new Date(2026,8,9)), /over 25 km/);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
+});
+
 test('plateaus produce one extremum and out-of-range heights are unavailable', () => {
   const predictions = [0,2,2,0,-2,-2,0].map((height, i) => ({time:new Date(i * 3600000), height}));
   const extrema = findHighLowTides(predictions);

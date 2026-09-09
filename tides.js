@@ -25,7 +25,15 @@ export async function getTidePredictions(locationId, date) {
   catch (error) { cache.delete(key); throw error; }
 }
 
-async function fetchPredictions(locationId, date) {
+function distanceKm(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.latitude - a.latitude) * rad;
+  const dLon = (b.longitude - a.longitude) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(b.latitude * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
+}
+
+async function fetchPredictions(locationId, date, originalLocation = null) {
   const [latitude, longitude] = locationId.split(',').map(Number);
   await getNearestTideStation(latitude, longitude);
   // Include both midnight boundaries and neighbours for detecting extrema.
@@ -50,12 +58,28 @@ async function fetchPredictions(locationId, date) {
   if (!Array.isArray(times) || !Array.isArray(heights)) throw new Error('No sea-level forecast returned for this location.');
   const predictions = times.map((time, i) => ({ time: new Date(time * 1000), height: heights[i] }))
     .filter(p => Number.isFinite(p.time.getTime()) && Number.isFinite(p.height));
+  const requested = originalLocation || { latitude, longitude };
+  const cell = { latitude: data.latitude, longitude: data.longitude };
+  const validCell = Number.isFinite(cell.latitude) && Number.isFinite(cell.longitude);
+  const distance = validCell ? distanceKm(requested, cell) : null;
+  // Best-match can return a sea coordinate but null tide values for a land input.
+  // Retry that returned coordinate once, never substitute a distant ocean point.
+  if (!predictions.length && !originalLocation && validCell && distance > 0.1 && distance <= 25) {
+    return fetchPredictions(`${cell.latitude},${cell.longitude}`, date, requested);
+  }
+  if (distance !== null && distance > 25) {
+    throw new Error('The available sea forecast is over 25 km away. Select a coastal location for tide estimates.');
+  }
   // Never draw a fabricated flat curve for an inland location or missing day.
   const day = predictions.filter(p => p.time >= start && p.time <= end);
   if (day.length < 2 || day[0].time > start || day.at(-1).time < end ||
       day.some((p, i) => i > 0 && p.time - day[i - 1].time > 3600000)) {
     throw new Error('No complete coastal forecast for this location and date. Choose a coastal location or another day.');
   }
+  predictions.forecastLocation = validCell ? {
+    ...cell, distanceKm: distance, nearby: Boolean(originalLocation),
+    name: `Sea forecast ${cell.latitude.toFixed(3)}, ${cell.longitude.toFixed(3)} (${distance.toFixed(1)} km away)`,
+  } : null;
   return predictions;
 }
 

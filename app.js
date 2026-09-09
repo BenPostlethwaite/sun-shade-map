@@ -22,7 +22,7 @@ import {
   getTideStats,
   getTideStatus,
   localDateString,
-} from './tides.js?v=20260909-marine';
+} from './tides.js?v=20260909-coastal';
 
 const STORAGE_KEY = 'sun-shade-map-state';
 const DEFAULT_STATE = {
@@ -978,6 +978,10 @@ async function updateTideData(force = false) {
     const predictions = await getTideData(station.id, dateTime);
     if (requestToken !== tideRequestToken) {
       return;
+    }
+
+    if (predictions?.forecastLocation) {
+      Object.assign(station, predictions.forecastLocation);
     }
 
     if (!predictions || predictions.length === 0) {
