@@ -26,7 +26,7 @@ export default {
     try {
       const response = await fetch(endpoint, {
         headers:{'Ocp-Apim-Subscription-Key':env.ADMIRALTY_API_KEY, Accept:'application/json'},
-        redirect:'error', signal:AbortSignal.timeout(15000), cache:'no-store',
+        redirect:'manual', signal:AbortSignal.timeout(15000), cache:'no-store',
       });
       if (!response.ok) return reply({error:response.status === 429 ? 'ADMIRALTY quota reached' : 'ADMIRALTY request failed', upstreamStatus:response.status}, response.status === 429 ? 429 : 502);
       return reply(await response.json());

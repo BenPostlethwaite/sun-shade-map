@@ -12,7 +12,7 @@ test('Worker forwards secret only in upstream header and prevents caching', asyn
   globalThis.fetch = async (url, options) => {
     assert.equal(url,'https://admiraltyapi.azure-api.net/uktidalapi/api/V1/Stations/0001/TidalEvents?duration=7');
     assert.equal(options.headers['Ocp-Apim-Subscription-Key'],'test-secret');
-    assert.equal(options.redirect,'error');
+    assert.equal(options.redirect,'manual');
     return Response.json([{EventType:'HighWater'}]);
   };
   try {
@@ -23,3 +23,4 @@ test('Worker forwards secret only in upstream header and prevents caching', asyn
     assert.equal((await response.text()).includes('test-secret'),false);
   } finally { globalThis.fetch = original; }
 });
+
