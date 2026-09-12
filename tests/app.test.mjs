@@ -18,7 +18,7 @@ test('Jump to now updates selection; chart backing store follows display pixel d
   const localStorage = {getItem(){return saved;},setItem(){}};
   const window = {devicePixelRatio:2,addEventListener(){}};
   const source = readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/import[\s\S]*?from '[^']+';/g,'');
-  const dependencies = {...solar,...tides,document,localStorage,window,navigator:{},ResizeObserver:class{observe(){}},setInterval(){}};
+  const dependencies = {updateAdmiraltyPanel(){},...solar,...tides,document,localStorage,window,navigator:{},ResizeObserver:class{observe(){}},setInterval(){}};
   new Function(...Object.keys(dependencies), source)(...Object.values(dependencies));
   document.getElementById('tideNowButton').click();
   assert.equal(document.getElementById('dateInput').value, tides.localDateString(new Date()));

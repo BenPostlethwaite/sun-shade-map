@@ -130,11 +130,13 @@ export function calculateCurrentTideHeight(dateTime, predictions) {
   // Find the two predictions that bracket the current time
   let lower = null;
   let upper = null;
+  let interval = 0;
 
   for (let i = 0; i < predictions.length - 1; i++) {
     if (predictions[i].time <= dateTime && dateTime <= predictions[i + 1].time) {
       lower = predictions[i];
       upper = predictions[i + 1];
+      interval = i;
       break;
     }
   }
@@ -147,9 +149,25 @@ export function calculateCurrentTideHeight(dateTime, predictions) {
     };
   }
 
-  // Linear interpolation between the two predictions
+  // Shape-preserving cubic Hermite interpolation: smooth without adding extrema.
+  const slope = (i) => (predictions[i + 1].height - predictions[i].height) /
+    (predictions[i + 1].time - predictions[i].time);
+  const tangent = (i) => {
+    if (i === 0) return slope(0);
+    if (i === predictions.length - 1) return slope(i - 1);
+    const before = slope(i - 1), after = slope(i);
+    if (before * after <= 0) return 0;
+    const h0 = predictions[i].time - predictions[i - 1].time;
+    const h1 = predictions[i + 1].time - predictions[i].time;
+    const w0 = 2 * h1 + h0, w1 = h1 + 2 * h0;
+    return (w0 + w1) / (w0 / before + w1 / after);
+  };
   const timeFraction = (dateTime - lower.time) / (upper.time - lower.time);
-  const height = lower.height + (upper.height - lower.height) * timeFraction;
+  const t = timeFraction, duration = upper.time - lower.time;
+  const height = (2*t*t*t - 3*t*t + 1) * lower.height +
+    (t*t*t - 2*t*t + t) * duration * tangent(interval) +
+    (-2*t*t*t + 3*t*t) * upper.height +
+    (t*t*t - t*t) * duration * tangent(interval + 1);
 
   // Determine if tide is rising or falling
   const status = upper.height === lower.height ? 'steady' : upper.height > lower.height ? 'rising' : 'falling';
