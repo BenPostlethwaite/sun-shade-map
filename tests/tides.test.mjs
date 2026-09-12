@@ -47,6 +47,23 @@ test('invalid coordinates fail before a request', async () => {
   await assert.rejects(getNearestTideStation(91, 0), /valid latitude/);
 });
 
+test('smooth interpolation preserves data points and stays bounded between each pair', () => {
+  const predictions = [0, 2, 1, -3, -3, 1].map((height, i) => ({time: new Date(i * 3600000), height}));
+  for (let i = 0; i < predictions.length - 1; i++) {
+    let previous = predictions[i].height;
+    for (let minute = 0; minute <= 60; minute++) {
+      const value = calculateCurrentTideHeight(new Date((i * 60 + minute) * 60000), predictions).height;
+      const low = Math.min(predictions[i].height, predictions[i + 1].height);
+      const high = Math.max(predictions[i].height, predictions[i + 1].height);
+      assert.ok(value >= low - 1e-10 && value <= high + 1e-10);
+      assert.ok((value - previous) * (predictions[i + 1].height - predictions[i].height) >= -1e-10);
+      previous = value;
+    }
+    assert.equal(calculateCurrentTideHeight(predictions[i].time, predictions).height, predictions[i].height);
+  }
+  assert.notEqual(calculateCurrentTideHeight(new Date(1800000), predictions).height, 1);
+});
+
 test('missing land data retries the returned nearby sea point and labels its distance', async () => {
   const original = globalThis.fetch;
   let calls = 0;

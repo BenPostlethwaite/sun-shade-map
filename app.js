@@ -22,7 +22,7 @@ import {
   getTideStats,
   getTideStatus,
   localDateString,
-} from './tides.js?v=20260909-chart';
+} from './tides.js?v=20260912-smooth';
 
 const STORAGE_KEY = 'sun-shade-map-state';
 const DEFAULT_STATE = {
@@ -146,7 +146,7 @@ function formatTideHeight(height) {
 function buildTideSamples(predictions, startOfDay) {
   const samples = [];
 
-  for (let minute = 0; minute <= 1440; minute += 20) {
+  for (let minute = 0; minute <= 1440; minute += 5) {
     const time = new Date(startOfDay);
     time.setMinutes(minute);
     const tide = calculateTideHeight(time, predictions);
