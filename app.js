@@ -373,100 +373,7 @@ function drawArrow(ctxInstance, fromX, fromY, toX, toY, color, lineWidth = 4) {
   ctxInstance.fill();
 }
 
-function drawTideGauge(context, outerRadius, tideSnapshot) {
-  if (!tideSnapshot?.hasTideData || !tideSnapshot.enabled) {
-    return;
-  }
-
-  const size = elements.skyCanvas.width;
-  const center = size / 2;
-  const gaugeRadius = outerRadius * 0.97;
-  const startAngle = Math.PI * 1.05;
-  const endAngle = Math.PI * 1.95;
-  const sweep = endAngle - startAngle;
-  const steps = 48;
-
-  const mix = (left, right, amount) => {
-    const blend = Math.max(0, Math.min(1, amount));
-    const channel = (channelIndex) => Math.round(left[channelIndex] + (right[channelIndex] - left[channelIndex]) * blend);
-    return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
-  };
-
-  const lowColor = [74, 154, 255];
-  const midColor = [95, 214, 209];
-  const highColor = [141, 236, 255];
-
-  context.lineCap = 'round';
-  context.lineWidth = 12;
-
-  for (let index = 0; index < steps; index += 1) {
-    const start = startAngle + (sweep * index) / steps;
-    const end = startAngle + (sweep * (index + 1)) / steps;
-    const t = index / (steps - 1);
-    const segmentColor = t < 0.5
-      ? mix(lowColor, midColor, t * 2)
-      : mix(midColor, highColor, (t - 0.5) * 2);
-
-    context.beginPath();
-    context.strokeStyle = segmentColor;
-    context.arc(center, center, gaugeRadius, start, end);
-    context.stroke();
-  }
-
-  const currentPercentage = Number.isFinite(tideSnapshot.current?.percentage)
-    ? tideSnapshot.current.percentage
-    : 50;
-  const currentAngle = startAngle + sweep * (currentPercentage / 100);
-  const markerRadius = gaugeRadius + 2;
-  const currentPoint = {
-    x: center + markerRadius * Math.cos(currentAngle),
-    y: center + markerRadius * Math.sin(currentAngle),
-  };
-
-  context.beginPath();
-  context.arc(currentPoint.x, currentPoint.y, 8, 0, Math.PI * 2);
-  context.fillStyle = '#f5aa3b';
-  context.shadowColor = 'rgba(245,170,59,0.35)';
-  context.shadowBlur = 16;
-  context.fill();
-  context.shadowBlur = 0;
-
-  const labelColor = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.9)' : 'rgba(255,255,255,0.92)';
-  context.fillStyle = labelColor;
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.font = '600 14px "Aptos", "Segoe UI", sans-serif';
-
-  const lowPoint = {
-    x: center + gaugeRadius * Math.cos(startAngle),
-    y: center + gaugeRadius * Math.sin(startAngle),
-  };
-  const highPoint = {
-    x: center + gaugeRadius * Math.cos(endAngle),
-    y: center + gaugeRadius * Math.sin(endAngle),
-  };
-
-  context.beginPath();
-  context.arc(lowPoint.x, lowPoint.y, 4, 0, Math.PI * 2);
-  context.fillStyle = '#4a9aff';
-  context.fill();
-
-  context.beginPath();
-  context.arc(highPoint.x, highPoint.y, 4, 0, Math.PI * 2);
-  context.fillStyle = '#8decff';
-  context.fill();
-
-  context.fillStyle = labelColor;
-  context.fillText('L', lowPoint.x, lowPoint.y + 16);
-  context.fillText('H', highPoint.x, highPoint.y + 16);
-
-  const statusText = tideSnapshot.current?.height == null
-    ? 'Tide unavailable'
-    : `${formatTideHeight(tideSnapshot.current.height)} ${getTideStatus(tideSnapshot.current.percentage, tideSnapshot.current.status)}`;
-  context.fillText(statusText, center, center + outerRadius * 0.72);
-}
-
-function renderSky(position, wallAspect, wallSteepness, windows = [], tideSnapshot = null) {
+function renderSky(position, wallAspect, wallSteepness, windows = []) {
   const canvas = elements.skyCanvas;
   const context = ctx;
   const size = canvas.width;
@@ -649,7 +556,6 @@ function renderSky(position, wallAspect, wallSteepness, windows = [], tideSnapsh
 
   // wall label removed per user request
 
-  drawTideGauge(context, outerRadius, tideSnapshot);
 }
 
 function renderTideGraph(snapshot, dateTime) {
@@ -816,7 +722,6 @@ function renderCurrentView() {
     lastRenderContext.wallAspect,
     lastRenderContext.wallAngle,
     lastRenderContext.windows,
-    tideSnapshot,
   );
   renderTideInfo(tideSnapshot);
   renderTideGraph(tideSnapshot, lastRenderContext.dateTime, lastRenderContext.sunTimes);
