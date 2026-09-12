@@ -1,3 +1,4 @@
+import { updateAdmiraltyPanel } from './admiralty.js?v=20260912-events';
 import {
   currentSunSummary,
   currentWallStatus,
@@ -733,6 +734,7 @@ async function updateTideData(force = false) {
   if (!force && key === tideRequestKey) return;
   tideRequestKey = key;
   const requestToken = ++tideRequestToken;
+  void updateAdmiraltyPanel({...state});
 
   if (!state.tideEnabled) {
     tideState = {
