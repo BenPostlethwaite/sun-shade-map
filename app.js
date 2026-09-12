@@ -22,7 +22,7 @@ import {
   getTideStats,
   getTideStatus,
   localDateString,
-} from './tides.js?v=20260909-coastal';
+} from './tides.js?v=20260909-chart';
 
 const STORAGE_KEY = 'sun-shade-map-state';
 const DEFAULT_STATE = {
@@ -665,202 +665,112 @@ function renderSky(position, wallAspect, wallSteepness, windows = [], tideSnapsh
   drawTideGauge(context, outerRadius, tideSnapshot);
 }
 
-function renderTideGraph(tideSnapshot, dateTime, sunTimes) {
-  if (!tideCtx) {
-    return;
-  }
-
+function renderTideGraph(snapshot, dateTime) {
   const canvas = elements.tideCanvas;
+  if (!tideCtx || !canvas) return;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!width || !height) return;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
   const context = tideCtx;
-  const width = canvas.width;
-  const height = canvas.height;
-  const left = 58;
-  const right = 22;
-  const top = 18;
-  const bottom = 34;
-  const chartWidth = width - left - right;
-  const chartHeight = height - top - bottom;
-
-  context.clearRect(0, 0, width, height);
-
-  if (!tideSnapshot.enabled) {
-    context.fillStyle = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.8)' : 'rgba(255,255,255,0.84)';
-    context.font = '600 15px "Aptos", "Segoe UI", sans-serif';
-    context.fillText('Enable tide data to view the daily curve.', left, top + 28);
-    elements.tideStatus.textContent = 'Tide data is turned off.';
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const light = document.body.classList.contains('sunlit');
+  const ink = light ? '#273344' : '#dce8f5';
+  const grid = light ? '#d2dce7' : '#26384b';
+  const curve = light ? '#126c83' : '#61e2db';
+  const selectedColor = light ? '#915400' : '#ffc164';
+  const nowColor = light ? '#5b42b3' : '#c7b6ff';
+  const left = 58, right = 24, top = 64, bottom = 42;
+  const chartWidth = width - left - right, chartHeight = height - top - bottom;
+  const now = new Date();
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const clock = formatTideTime;
+  document.getElementById('tideTimeContext').textContent =
+    `${dateTime.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'})} · ${zone} · 24-hour times`;
+  document.getElementById('tideNowLabel').textContent = `Now ${clock(now)}${localDateString(now) === state.date ? '' : ' · outside selected day'}`;
+  document.getElementById('tideSelectedLabel').textContent = `Selected ${clock(dateTime)}`;
+  const eventsElement = document.getElementById('tideEvents');
+  eventsElement.replaceChildren();
+  document.getElementById('tideSourceLocation').textContent = snapshot.stationName;
+  if (!snapshot.enabled || !snapshot.hasTideData) {
+    const message = !snapshot.enabled ? 'Tide data is turned off.' : snapshot.loading ? 'Loading local sea-level forecast…' : snapshot.error || 'No forecast available.';
+    elements.tideStatus.textContent = message;
+    context.fillStyle = ink;
+    context.font = '14px "Segoe UI", sans-serif';
+    context.fillText(snapshot.loading ? 'Loading forecast…' : 'No tide curve to display', 20, 100);
     return;
   }
-
-  if (tideSnapshot.loading && !tideSnapshot.hasTideData) {
-    context.fillStyle = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.8)' : 'rgba(255,255,255,0.84)';
-    context.font = '600 15px "Aptos", "Segoe UI", sans-serif';
-    context.fillText('Loading tide data…', left, top + 28);
-    elements.tideStatus.textContent = 'Loading local sea-level forecast…';
-    return;
-  }
-
-  if (tideSnapshot.error && !tideSnapshot.hasTideData) {
-    context.fillStyle = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.8)' : 'rgba(255,255,255,0.84)';
-    context.font = '600 15px "Aptos", "Segoe UI", sans-serif';
-    context.fillText('Tide data unavailable for this location.', left, top + 28);
-    elements.tideStatus.textContent = tideSnapshot.error;
-    return;
-  }
-
-  const predictions = tideSnapshot.predictions;
-  const samples = tideSnapshot.samples;
-  if (!predictions.length || !samples.length) {
-    context.fillStyle = document.body.classList.contains('sunlit') ? 'rgba(32,32,24,0.8)' : 'rgba(255,255,255,0.84)';
-    context.font = '600 15px "Aptos", "Segoe UI", sans-serif';
-    context.fillText('No tide predictions returned for this day.', left, top + 28);
-    elements.tideStatus.textContent = tideSnapshot.error || 'No predictions available.';
-    return;
-  }
-
-  const heights = samples.map((sample) => sample.height);
-  let minHeight = Math.min(...heights);
-  let maxHeight = Math.max(...heights);
-  if (Math.abs(maxHeight - minHeight) < 0.1) {
-    maxHeight += 0.05;
-    minHeight -= 0.05;
-  }
-  const heightRange = maxHeight - minHeight;
-  const xForMinute = (minute) => left + (minute / 1440) * chartWidth;
-  const yForHeight = (value) => top + (1 - (value - minHeight) / heightRange) * chartHeight;
-  const isLight = document.body.classList.contains('sunlit');
-  const gridColor = isLight ? 'rgba(32,32,24,0.12)' : 'rgba(255,255,255,0.12)';
-  const axisColor = isLight ? 'rgba(32,32,24,0.75)' : 'rgba(255,255,255,0.82)';
-
-  context.save();
-  context.strokeStyle = gridColor;
-  context.lineWidth = 1;
-  context.setLineDash([4, 8]);
-
-  for (let line = 0; line <= 4; line += 1) {
-    const value = minHeight + (heightRange * line) / 4;
-    const y = yForHeight(value);
-    context.beginPath();
-    context.moveTo(left, y);
-    context.lineTo(width - right, y);
-    context.stroke();
-  }
-
-  context.restore();
-
-  context.fillStyle = axisColor;
-  context.font = '600 12px "Aptos", "Segoe UI", sans-serif';
-  context.textAlign = 'right';
+  const values = snapshot.samples.map(s => s.height).filter(Number.isFinite);
+  if (!values.length) return;
+  let min = Math.min(...values), max = Math.max(...values);
+  const padding = Math.max(0.08, (max - min) * 0.12);
+  min -= padding; max += padding;
+  const x = minute => left + minute / 1440 * chartWidth;
+  const y = value => top + (max - value) / (max - min) * chartHeight;
+  const minute = date => date.getHours() * 60 + date.getMinutes();
+  context.font = '13px "Segoe UI", sans-serif';
   context.textBaseline = 'middle';
-  for (let line = 0; line <= 4; line += 1) {
-    const value = minHeight + (heightRange * line) / 4;
-    const y = yForHeight(value);
-    context.fillText(formatTideHeight(value), left - 10, y);
+  for (let i = 0; i <= 4; i++) {
+    const value = min + (max - min) * i / 4;
+    context.strokeStyle = grid;
+    context.beginPath(); context.moveTo(left, y(value)); context.lineTo(width - right, y(value)); context.stroke();
+    context.fillStyle = ink; context.textAlign = 'right';
+    context.fillText(`${value.toFixed(1)} m`, left - 9, y(value));
   }
-
-  const startOfDay = new Date(dateTime);
-  startOfDay.setHours(0, 0, 0, 0);
-  const sunriseMinute = sunTimes?.sunrise ? ((sunTimes.sunrise.getHours() * 60) + sunTimes.sunrise.getMinutes()) : null;
-  const sunsetMinute = sunTimes?.sunset ? ((sunTimes.sunset.getHours() * 60) + sunTimes.sunset.getMinutes()) : null;
-
-  const drawTimeLine = (minute, label, color) => {
-    if (minute == null) {
-      return;
-    }
-
-    const x = xForMinute(minute);
-    context.save();
-    context.strokeStyle = color;
-    context.setLineDash([6, 6]);
-    context.beginPath();
-    context.moveTo(x, top);
-    context.lineTo(x, top + chartHeight);
-    context.stroke();
-    context.restore();
-
-    context.fillStyle = color;
-    context.textAlign = 'center';
-    context.fillText(label, x, height - 14);
-  };
-
-  drawTimeLine(sunriseMinute, 'sunrise', 'rgba(245,170,59,0.55)');
-  drawTimeLine(sunsetMinute, 'sunset', 'rgba(245,170,59,0.45)');
-
-  const curveColor = isLight ? 'rgba(53, 128, 255, 0.9)' : 'rgba(97, 226, 219, 0.9)';
+  const step = width < 600 ? 6 : 3;
+  for (let hour = 0; hour <= 24; hour += step) {
+    context.fillStyle = ink; context.textAlign = 'center';
+    context.fillText(`${String(hour).padStart(2,'0')}:00`, x(hour * 60), height - 20);
+    context.strokeStyle = grid;
+    context.beginPath(); context.moveTo(x(hour * 60), top); context.lineTo(x(hour * 60), height - bottom); context.stroke();
+  }
   context.beginPath();
-  samples.forEach((sample, index) => {
-    const x = xForMinute(sample.minute);
-    const y = yForHeight(sample.height);
-    if (index === 0) {
-      context.moveTo(x, y);
-    } else {
-      context.lineTo(x, y);
-    }
-  });
-  context.strokeStyle = curveColor;
-  context.lineWidth = 3;
-  context.lineJoin = 'round';
-  context.lineCap = 'round';
-  context.stroke();
-
-  const currentMinute = dateTime.getHours() * 60 + dateTime.getMinutes();
-  const currentX = xForMinute(currentMinute);
-  context.save();
-  context.strokeStyle = 'rgba(245,170,59,0.85)';
-  context.setLineDash([3, 5]);
-  context.beginPath();
-  context.moveTo(currentX, top);
-  context.lineTo(currentX, top + chartHeight);
-  context.stroke();
-  context.restore();
-
-  const currentPoint = calculateTideHeight(dateTime, predictions);
-  if (Number.isFinite(currentPoint.height)) {
-    const y = yForHeight(currentPoint.height);
-    context.beginPath();
-    context.arc(currentX, y, 6, 0, Math.PI * 2);
-    context.fillStyle = '#f5aa3b';
-    context.fill();
+  let drawing = false;
+  for (const sample of snapshot.samples) {
+    if (!Number.isFinite(sample.height)) { drawing = false; continue; }
+    if (!drawing) context.moveTo(x(sample.minute), y(sample.height));
+    else context.lineTo(x(sample.minute), y(sample.height));
+    drawing = true;
   }
-
-  const highTide = tideSnapshot.highTides[0];
-  const lowTide = tideSnapshot.lowTides[0];
-  const markerColor = isLight ? '#214cff' : '#8decff';
-  const drawMarker = (entry, label, fillColor) => {
-    if (!entry) {
-      return;
+  context.strokeStyle = curve; context.lineWidth = 2.5; context.lineJoin = 'round'; context.stroke();
+  const events = [ ...snapshot.highTides.map(t => ({...t, type:'High'})), ...snapshot.lowTides.map(t => ({...t, type:'Low'})) ].sort((a,b) => a.time-b.time);
+  for (const event of events) {
+    context.beginPath(); context.arc(x(minute(event.time)), y(event.height), 4, 0, Math.PI * 2);
+    context.fillStyle = curve; context.fill();
+    context.fillStyle = ink; context.textAlign = 'center';
+    context.fillText(event.type === 'High' ? 'H' : 'L', x(minute(event.time)), y(event.height) + (event.type === 'High' ? -15 : 16));
+    const item = document.createElement('li');
+    const label = document.createElement('span'); label.textContent = `${event.type} tide`;
+    const time = document.createElement('strong'); time.textContent = clock(event.time);
+    const value = document.createElement('span'); value.textContent = `${event.height.toFixed(2)} m`;
+    item.append(label, time, value); eventsElement.append(item);
+  }
+  if (!events.length) { const item = document.createElement('li'); item.textContent = 'No high or low tide detected on this day.'; eventsElement.append(item); }
+  const marker = (date, label, color, labelY, dashed) => {
+    const px = x(minute(date));
+    context.save(); context.strokeStyle = color; context.lineWidth = 1.5;
+    context.setLineDash(dashed ? [5,4] : []);
+    context.beginPath(); context.moveTo(px, top - 4); context.lineTo(px, height - bottom); context.stroke(); context.restore();
+    context.font = '600 13px "Segoe UI", sans-serif';
+    const text = `${label} ${clock(date)}`;
+    const half = context.measureText(text).width / 2;
+    context.fillStyle = color; context.textAlign = 'center';
+    context.fillText(text, Math.max(left + half, Math.min(width - right - half, px)), labelY);
+    const tide = calculateTideHeight(date, snapshot.predictions);
+    if (Number.isFinite(tide.height)) {
+      context.beginPath(); context.arc(px, y(tide.height), 5, 0, Math.PI*2); context.fill();
     }
-
-    const minute = entry.time.getHours() * 60 + entry.time.getMinutes();
-    const x = xForMinute(minute);
-    const y = yForHeight(entry.height);
-    context.beginPath();
-    context.arc(x, y, 5, 0, Math.PI * 2);
-    context.fillStyle = fillColor;
-    context.fill();
-    context.fillStyle = axisColor;
-    context.textAlign = 'center';
-    context.fillText(label, x, y - 14);
   };
-
-  drawMarker(lowTide, 'low', markerColor);
-  drawMarker(highTide, 'high', '#f5aa3b');
-
-  context.fillStyle = axisColor;
-  context.textAlign = 'left';
-  context.textBaseline = 'alphabetic';
-  context.font = '600 13px "Aptos", "Segoe UI", sans-serif';
-  const currentHeightText = currentPoint.height == null ? 'Tide unavailable' : `${formatTideHeight(currentPoint.height)} ${getTideStatus(currentPoint.percentage, currentPoint.status)}`;
-  context.fillText(`${currentHeightText} • ${tideSnapshot.stationName}`, left, height - 12);
-
-  if (tideSnapshot.nextChange) {
-    const minutesAway = Math.max(0, Math.round((tideSnapshot.nextChange.time - dateTime) / 60000));
-    context.textAlign = 'right';
-    context.fillText(`${tideSnapshot.nextChange.type} tide in ${formatDuration(minutesAway)}`, width - right, height - 12);
-    elements.tideStatus.textContent = `${currentHeightText}. Next ${tideSnapshot.nextChange.type} tide at ${formatTideTime(tideSnapshot.nextChange.time)}.`;
-  } else {
-    elements.tideStatus.textContent = `${currentHeightText}. No later tide change found for this day.`;
-  }
+  marker(dateTime, 'Selected', selectedColor, 20, false);
+  if (localDateString(now) === state.date) marker(now, 'Now', nowColor, 42, true);
+  const current = snapshot.current;
+  const next = snapshot.nextChange;
+  const nextText = next ? ` Next ${next.type} tide: ${clock(next.time)}${localDateString(next.time) !== state.date ? ' on ' + next.time.toLocaleDateString('en-GB', {day:'numeric',month:'short'}) : ''} (${next.height.toFixed(2)} m).` : ' No later tide event in the available forecast.';
+  elements.tideStatus.textContent = `Selected ${clock(dateTime)}: ${formatTideHeight(current.height)}, ${current.status}.${nextText}`;
 }
+
 
 function renderTideInfo(tideSnapshot) {
   elements.tideStationStat.textContent = tideSnapshot.stationName || 'Current location';
@@ -1237,12 +1147,14 @@ if (elements.tideStationButton) elements.tideStationButton.addEventListener('cli
   void updateTideData(true);
 });
 
-if (elements.nowButton) elements.nowButton.addEventListener('click', () => {
+function jumpToNow() {
   const now = new Date();
   state.date = localDateString(now);
   state.time = now.toTimeString().slice(0,5);
   updateFromState();
-});
+}
+elements.nowButton?.addEventListener('click', jumpToNow);
+document.getElementById('tideNowButton').addEventListener('click', jumpToNow);
 
 window.addEventListener('resize', () => updateFromState());
 
@@ -1253,3 +1165,7 @@ function initialize() {
 }
 
 initialize();
+
+// Refresh the real clock marker without refetching forecasts or moving the selection.
+setInterval(() => { if (!document.hidden) renderCurrentView(); }, 60000);
+new ResizeObserver(() => renderCurrentView()).observe(elements.tideCanvas);

@@ -9,7 +9,7 @@
       content="Local sun position and wall exposure planner with sky map and sunlit timing windows."
     />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260909-chart" />
   </head>
   <body>
     <div class="backdrop backdrop-a"></div>
@@ -218,14 +218,19 @@
             <h2>Tide height</h2>
             <p>Estimated sea level including tides near your selected location. Times use your device’s time zone.</p>
           </div>
-          <canvas id="tideCanvas" width="960" height="200" aria-label="Tide height chart"></canvas>
+          <p id="tideTimeContext" class="help-text"></p>
+          <div class="tide-clock-legend"><span id="tideSelectedLabel"></span><span id="tideNowLabel"></span><button id="tideNowButton" class="secondary" type="button">Jump to now</button></div>
+          <canvas id="tideCanvas" width="960" height="320" aria-label="Daily tide curve. Exact estimated event times are listed below." aria-describedby="tideStatus"></canvas>
           <div id="tideStatus" class="tide-status-text" role="status">Loading tide data...</div>
+          <h3>High &amp; low tides <small>Estimated · selected day</small></h3>
+          <ul id="tideEvents" class="tide-events" aria-label="Estimated high and low tide times"></ul>
+          <p id="tideSourceLocation" class="help-text"></p>
           <p class="help-text">Hourly model estimates in metres relative to mean sea level, plus your height adjustment. Coastal accuracy is limited: do not use this forecast to determine safe tidal access or for navigation. Check <a href="https://easytide.admiralty.co.uk/" target="_blank" rel="noopener noreferrer">ADMIRALTY tide predictions</a> and local conditions.</p>
           <p class="help-text">Marine data: <a href="https://open-meteo.com/">Open-Meteo</a>, <a href="https://data.marine.copernicus.eu/">Copernicus Marine / Météo-France</a> and <a href="https://www.dwd.de/">DWD</a>.</p>
         </section>
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260909-coastal"></script>
+    <script type="module" src="./app.js?v=20260909-chart"></script>
   </body>
 </html>
