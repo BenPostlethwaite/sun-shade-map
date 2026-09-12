@@ -36,7 +36,6 @@ const DEFAULT_STATE = {
   wallHeight: 2.4,
   wallOverhang: 0,
   tideEnabled: true,
-  tideOffset: 0,
   tideStationId: '',
   tideStationName: 'Current location',
   tideStationLatitude: null,
@@ -69,7 +68,6 @@ const elements = {
   tideEnabledInput: document.getElementById('tideEnabledInput'),
   tideStationButton: document.getElementById('tideStationButton'),
   tideStationStat: document.getElementById('tideStationStat'),
-  tideOffsetInput: document.getElementById('tideOffsetInput'),
   
   sunAzimuthStat: document.getElementById('sunAzimuthStat'),
   sunAltitudeStat: document.getElementById('sunAltitudeStat'),
@@ -144,17 +142,6 @@ function formatTideHeight(height) {
   return Number.isFinite(height) ? `${height.toFixed(1)}m` : '—';
 }
 
-function getAdjustedTidePredictions() {
-  if (!tideState.predictions.length) {
-    return [];
-  }
-
-  const offset = Number(state.tideOffset) || 0;
-  return tideState.predictions.map((prediction) => ({
-    ...prediction,
-    height: prediction.height + offset,
-  }));
-}
 
 function buildTideSamples(predictions, startOfDay) {
   const samples = [];
@@ -174,7 +161,7 @@ function buildTideSamples(predictions, startOfDay) {
 }
 
 function buildTideSnapshot(dateTime) {
-  const predictions = state.tideEnabled ? getAdjustedTidePredictions() : [];
+  const predictions = state.tideEnabled ? tideState.predictions : [];
   const hasTideData = predictions.length > 0;
   const startOfDay = new Date(`${state.date}T00:00:00`);
   const endOfDay = new Date(startOfDay);
@@ -953,7 +940,6 @@ function syncControlsFromState() {
   elements.wallHeightInput.value = state.wallHeight;
   elements.wallOverhangInput.value = state.wallOverhang;
   if (elements.tideEnabledInput) elements.tideEnabledInput.checked = Boolean(state.tideEnabled);
-  if (elements.tideOffsetInput) elements.tideOffsetInput.value = state.tideOffset;
   if (elements.tideStationStat) elements.tideStationStat.textContent = state.tideStationName || 'Current location';
 
   const isDimensions = state.angleMode === 'dimensions';
@@ -1088,9 +1074,6 @@ if (elements.tideEnabledInput) bindInput(elements.tideEnabledInput, () => {
   state.tideEnabled = elements.tideEnabledInput.checked;
 });
 
-if (elements.tideOffsetInput) bindInput(elements.tideOffsetInput, () => {
-  state.tideOffset = Number(elements.tideOffsetInput.value);
-});
 
 
 elements.angleModeButton.addEventListener('click', () => {

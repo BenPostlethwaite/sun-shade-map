@@ -37,7 +37,7 @@ The browser requests your location when the app opens. Allow access, press **Use
 
 No API key or backend is required for personal, non-commercial use. The app calls `https://marine-api.open-meteo.com/v1/marine` with `sea_level_height_msl`; see the [provider documentation](https://open-meteo.com/en/docs/marine-weather-api) and [usage terms](https://open-meteo.com/en/terms). Coordinates are sent to Open-Meteo to retrieve the forecast. Successful requests are cached in memory for 30 minutes and simultaneous requests are shared.
 
-Heights are hourly model estimates relative to global mean sea level, with the optional user height adjustment added. They are not chart-datum heights. High and low times are approximate extrema of those hourly samples. The daily cards show all detected extrema on the selected device-local calendar day; the next tide may fall on the following day. All clock times use the device's time zone, including when viewing remote coordinates.
+Heights are hourly model estimates relative to global mean sea level. They are not chart-datum heights. High and low times are approximate extrema of those hourly samples. The daily cards show all detected extrema on the selected device-local calendar day; the next tide may fall on the following day. All clock times use the device's time zone, including when viewing remote coordinates.
 
 Coastal accuracy is limited. Do not use these estimates for navigation or to determine safe access to tidal climbing areas. Check [ADMIRALTY EasyTide](https://easytide.admiralty.co.uk/) and local conditions. Data attribution is displayed below the graph.
 
